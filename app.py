@@ -1,25 +1,35 @@
+
 import streamlit as st
 import speech_recognition as sr
 from gtts import gTTS
 from googletrans import Translator
 import requests
 import os
+import time
+
+# ---------------- CONFIG ----------------
+st.set_page_config(page_title="Raitu Mitra", layout="centered")
 
 translator = Translator()
-API_KEY = "fa4d9b9acdd142cb4b745c54244caf83"
+WEATHER_API_KEY = "fa4d9b9acdd142cb4b745c54244caf83"
 
-# ---------- Voice Functions ----------
+# ---------------- VOICE FUNCTIONS ----------------
 def listen_telugu():
     r = sr.Recognizer()
     with sr.Microphone() as source:
         st.info("🎤 మాట్లాడండి...")
         audio = r.listen(source)
-        return r.recognize_google(audio, language="te-IN")
+        try:
+            text = r.recognize_google(audio, language="te-IN")
+            return text
+        except:
+            return "క్షమించండి, మళ్లీ ప్రయత్నించండి"
 
 def speak_telugu(text):
     tts = gTTS(text=text, lang="te")
     tts.save("reply.mp3")
-    os.system("start reply.mp3")
+    os.system("start reply.mp3")  # Windows
+    time.sleep(2)
 
 def te_to_en(text):
     return translator.translate(text, src="te", dest="en").text
@@ -27,71 +37,93 @@ def te_to_en(text):
 def en_to_te(text):
     return translator.translate(text, src="en", dest="te").text
 
-# ---------- Weather ----------
+# ---------------- WEATHER ----------------
 def get_weather(city):
-    url = f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={API_KEY}&units=metric"
+    url = f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={WEATHER_API_KEY}&units=metric"
     data = requests.get(url).json()
-    return f"{city} లో ఉష్ణోగ్రత {data['main']['temp']}°C, వాతావరణం {data['weather'][0]['description']}"
 
-# ---------- Farming Logic ----------
+    if data.get("cod") != 200:
+        return "నగరం కనుగొనబడలేదు"
+
+    return f"""
+{city} లో:
+ఉష్ణోగ్రత {data['main']['temp']}°C
+ఆర్ద్రత {data['main']['humidity']}%
+వాతావరణం {data['weather'][0]['description']}
+"""
+
+# ---------------- FARMING BOT ----------------
 def farming_bot(q):
     q = q.lower()
     if "crop" in q:
-        return "ఈ కాలంలో వరి, మక్క, పత్తి మంచి పంటలు"
-    if "fertilizer" in q:
+        return "ఈ కాలంలో వరి, మక్క మరియు పత్తి మంచి పంటలు"
+    elif "fertilizer" in q:
         return "సేంద్రియ ఎరువులు మరియు NPK సరైనవి"
-    if "pest" in q:
+    elif "pest" in q:
         return "నిమ్మ నూనె సహజ కీటకనాశిని"
-    if "irrigation" in q:
+    elif "irrigation" in q:
         return "డ్రిప్ సాగు నీటిని ఆదా చేస్తుంది"
-    return "వ్యవసాయం గురించి అడగండి"
+    elif "weather" in q:
+        return "వాతావరణ వివరాల కోసం వాతావరణ విభాగాన్ని ఉపయోగించండి"
+    else:
+        return "వ్యవసాయం లేదా వాతావరణం గురించి అడగండి"
 
-# ---------- UI ----------
-st.set_page_config(page_title="Raitu Mitra", layout="centered")
+# ---------------- SIDEBAR ----------------
+menu = st.sidebar.radio(
+    "📱 స్క్రీన్ ఎంచుకోండి",
+    ["🏠 Home", "🌦 Weather", "🌾 Farming", "🤖 Ask Anything"]
+)
 
-menu = st.sidebar.radio("Navigate", [
-    "🏠 Home",
-    "🌦 Weather Assistant",
-    "🌾 Farming Assistant",
-    "🤖 Ask Anything"
-])
-
-# ---------- Screen 1 ----------
+# ---------------- SCREEN 1 : HOME ----------------
 if menu == "🏠 Home":
-    st.image("assets/logo.jpg", width=300)
+    st.image("assets/logo.jpeg", width=300)
     st.markdown("## 🌾 Raitu Mitra")
     st.markdown("### Digital Farmer’s Friend")
-    st.success("Continue from the sidebar")
+    st.success("ఎడమ వైపు మెనూ ద్వారా కొనసాగండి")
 
-# ---------- Screen 2 ----------
-elif menu == "🌦 Weather Assistant":
+# ---------------- SCREEN 2 : WEATHER ----------------
+elif menu == "🌦 Weather":
     st.header("🌦️ వాతావరణ సహాయకుడు")
-    city = st.text_input("నగరం పేరు")
-    if st.button("🎤 మాట్లాడండి"):
-        telugu = listen_telugu()
-        eng = te_to_en(telugu)
-        weather = get_weather(city)
-        reply = en_to_te(weather)
-        st.success(reply)
-        speak_telugu(reply)
 
-# ---------- Screen 3 ----------
-elif menu == "🌾 Farming Assistant":
+    city = st.text_input("నగరం పేరు నమోదు చేయండి")
+
+    if st.button("🎤 వాతావరణం అడగండి"):
+        spoken_telugu = listen_telugu()
+        st.write("మీ ప్రశ్న:", spoken_telugu)
+
+        if city:
+            weather_info = get_weather(city)
+            st.success(weather_info)
+            speak_telugu(weather_info)
+        else:
+            st.warning("దయచేసి నగరం పేరు నమోదు చేయండి")
+
+# ---------------- SCREEN 3 : FARMING ----------------
+elif menu == "🌾 Farming":
     st.header("🌾 వ్యవసాయ సహాయకుడు")
-    if st.button("🎤 ప్రశ్న అడగండి"):
-        telugu = listen_telugu()
-        eng = te_to_en(telugu)
-        ans = farming_bot(eng)
-        tel_ans = en_to_te(ans)
-        st.success(tel_ans)
-        speak_telugu(tel_ans)
 
-# ---------- Screen 4 ----------
+    if st.button("🎤 వ్యవసాయ ప్రశ్న అడగండి"):
+        spoken_telugu = listen_telugu()
+        st.write("మీ ప్రశ్న:", spoken_telugu)
+
+        english = te_to_en(spoken_telugu)
+        answer = farming_bot(english)
+        telugu_answer = en_to_te(answer)
+
+        st.success(telugu_answer)
+        speak_telugu(telugu_answer)
+
+# ---------------- SCREEN 4 : ASK ANYTHING ----------------
 elif menu == "🤖 Ask Anything":
-    st.header("🤖 రైతు సందేహాలు")
+    st.header("🤖 రైతు మిత్రుడు")
+
     if st.button("🎤 మాట్లాడండి"):
-        telugu = listen_telugu()
-        eng = te_to_en(telugu)
-        reply = en_to_te(farming_bot(eng))
-        st.success(reply)
-        speak_telugu(reply)
+        spoken_telugu = listen_telugu()
+        st.write("మీ ప్రశ్న:", spoken_telugu)
+
+        english = te_to_en(spoken_telugu)
+        answer = farming_bot(english)
+        telugu_answer = en_to_te(answer)
+
+        st.success(telugu_answer)
+        speak_telugu(telugu_answer)
